@@ -116,6 +116,53 @@ Esto es importante: **el boot problemático reciente no está disponible en el j
 
 El kernel del boot actual y del boot de abril muestra `Previous system reset reason [0x00080800]: software wrote 0x6 to reset control register 0xCF9`, compatible con un reset provocado por software como REISUB; esto no constituye evidencia de fallo de hardware.
 
+### Prueba 011 — Arquitectura de journald y flush persistente
+
+**Resultado: JOURNAL PERSISTENTE FUNCIONANDO, PERO FLUSH TARDÍO OBSERVADO.**
+
+La configuración efectiva mantiene `Storage=auto` (valor por defecto). `/var/log/journal` existe desde abril, tiene permisos/SELinux context correctos y actualmente contiene journals persistentes.
+
+`systemd-journal-flush.service` termina con `status=0/SUCCESS` a las 18:59:22, pero `systemd-journald` registra el flush efectivo hacia `/var/log/journal` a las 22:17:19, cuando también cambia la fecha de modificación de `/var/log/journal`.
+
+No se ha demostrado todavía por qué existe esta diferencia. Queda pendiente correlacionar qué ocurrió alrededor de las 22:17:19.
+
+### Prueba 012 — Escritura real RW y disponibilidad de `/run`
+
+**Resultado: OK.**
+
+`/` está montado `btrfs rw` y `/run` está montado `tmpfs rw`.
+
+Las primeras pruebas de `touch` como usuario `oscar` fallaron con `Permiso denegado`, lo que fue correctamente identificado como un problema de permisos de la prueba, no del filesystem.
+
+Las pruebas corregidas con `sudo` demostraron:
+
+- escritura real en `/root`: **OK**;
+- escritura real en `/run`: **OK**;
+- prueba controlada de escritura en `/root`: `RESULT=RW`.
+
+Esto valida el mecanismo que utilizará el watchdog: **detectar RO mediante una escritura real y no solamente leyendo las opciones de `findmnt`.**
+
+### Prueba 013 — Diseño e incorporación del watchdog forense
+
+**Resultado: IMPLEMENTADO EN REPOSITORIO; PENDIENTE DE INSTALACIÓN/PRUEBA.**
+
+Se incorporó `tools/zeughaus-ro-watch`, versión 0.1, y su unidad `systemd/zeughaus-ro-watch.service`.
+
+El watchdog:
+
+- ejecuta como root;
+- prueba una escritura real en `/root` cada 10 segundos;
+- captura un incidente cuando la escritura falla;
+- guarda la evidencia bajo `/run/zeughaus-ro-watch/`, que es `tmpfs` y debe seguir siendo escribible si `/` pasa a `ro`;
+- captura estado de mounts, Btrfs, kernel, NVMe/RO, journal y unidades fallidas;
+- registra el incidente en el journal mediante `systemd-cat`;
+- evita inundar `/run` con capturas repetidas mientras `/` siga sin escritura;
+- no intenta hacer `remount,rw` automáticamente.
+
+También se incorporó `tools/zeughaus-ro-harvest`, que permite copiar el último incidente desde `/run` al repositorio después de restaurar `/` a `rw`.
+
+**Importante:** todavía no se ha instalado ni habilitado el servicio. La siguiente acción es hacer `git pull`, instalarlo manualmente y probar primero su funcionamiento normal.
+
 ## Hipótesis actuales
 
 | ID | Hipótesis | Prioridad | Estado |
@@ -125,15 +172,15 @@ El kernel del boot actual y del boot de abril muestra `Previous system reset rea
 | H3 | Otro componente vuelve a montar `/` como `ro` | Alta | En investigación |
 | H4 | SSHFS persistente de heinrici bloquea Nautilus | Alta | Evidencia fuerte |
 | H5 | Problema físico/controlador del NVMe no reflejado en Btrfs stats/SMART | Media-baja | No demostrado |
-| H6 | Journald no está haciendo correctamente el flush/persistencia durante determinados arranques | Alta | Evidencia parcial; requiere investigar configuración/unidad y preparar captura futura |
+| H6 | Journald no está haciendo correctamente el flush/persistencia durante determinados arranques | Alta | Evidencia parcial; flush efectivo tardío observado |
 | H7 | Salto de reloj durante el arranque explica la diferencia 14:59→18:59 observada en timestamps | Alta | Evidencia fuerte |
 | H8 | `home-oscar-scans.mount` contribuye a demoras/bloqueos durante el arranque | Media | Evidencia: ~42 s en `systemd-analyze blame` |
 
 ## Próximo paso
 
-No podemos investigar retrospectivamente el incidente de ayer porque ese boot no está disponible en el journal. Antes de tocar Btrfs, debemos asegurar que el próximo incidente quede registrado persistentemente.
+Hacer `git pull` y revisar/instalar el watchdog forense en zeughaus. Primero se probará manualmente/como servicio sin habilitarlo permanentemente. Una vez validado, se dejará activo para capturar el próximo incidente real `rw → ro`.
 
-Siguiente línea de trabajo: inspeccionar `systemd-journald`, `systemd-journal-flush`, su configuración efectiva (`Storage=`/drop-ins), y el momento en que el journal pasa de runtime a persistent. Después podremos preparar una captura robusta del eventual `rw → ro`.
+Cuando ocurra un incidente, **no reiniciar inmediatamente** si la interfaz sigue respondiendo: primero se preservará la evidencia bajo `/run/zeughaus-ro-watch/`. Después de restaurar `/` a `rw`, se utilizará `zeughaus-ro-harvest` para copiarla al repositorio y analizarla.
 
 No ejecutar todavía `btrfs check`, scrub ni reparaciones a ciegas.
 
