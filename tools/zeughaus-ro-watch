@@ -1,5 +1,5 @@
 #!/bin/bash
-# zeughaus-ro-watch v0.3
+# zeughaus-ro-watch v0.4
 # Detects loss of write access to the root Btrfs filesystem and captures
 # forensic evidence into /run, which remains writable if / becomes read-only.
 
@@ -47,14 +47,17 @@ except OSError as e:
 PY
 }
 
+# write_test is a Bash function. Export it so the forensic retest can run
+# safely through timeout -> bash. v0.3 incorrectly asked timeout to execute
+# the function as if it were an external command.
+export -f write_test
+
 capture() {
     local incident="$1"
     local dir="$BASE/$incident"
     mkdir -p "$dir"
     chmod 700 "$dir"
 
-    # Write the minimal trigger record first. If a later forensic command hangs,
-    # this file still tells us exactly why and when the incident was triggered.
     {
         printf 'timestamp=%s\n' "$(date --iso-8601=ns)"
         printf 'errno=%s\n' "${WRITE_ERRNO:-unknown}"
@@ -88,8 +91,8 @@ capture() {
     run_capture "$dir/systemd-failed.txt" systemctl --failed --no-pager
     run_capture "$dir/watchdog-status.txt" systemctl status zeughaus-ro-watch.service --no-pager
 
-    # Independently retest the write using the same kernel-level errno mechanism.
-    run_capture "$dir/write-error-retest.txt" write_test /root/.zeughaus-rw-watch-forensic-test
+    # write_test is exported above so bash can invoke it under timeout.
+    run_capture "$dir/write-error-retest.txt" bash -c 'write_test "$1"' -- /root/.zeughaus-rw-watch-forensic-test
 
     printf '%s\n' "$dir" > "$BASE/LAST_INCIDENT"
     log "RO incident captured: $dir"
@@ -117,8 +120,6 @@ while :; do
             esac
         done <<< "$WRITE_OUTPUT"
 
-        # The exact errno is authoritative. Only EROFS (30) is a filesystem
-        # read-only incident; other errno values are retained as separate clues.
         incident_type="write-failure"
         if [[ "$WRITE_ERRNAME" == "EROFS" || "$WRITE_ERRNO" == "30" ]]; then
             incident_type="ro-incident"
@@ -128,8 +129,6 @@ while :; do
         log "WRITE TEST FAILED type=$incident_type rc=$rc errno=$WRITE_ERRNO errname=$WRITE_ERRNAME error=$WRITE_ERROR"
         capture "$incident"
 
-        # Do not spam captures while the filesystem remains unwritable.
-        # Record the duration of the unwritable interval in /run.
         ro_started="$(date --iso-8601=ns)"
         printf 'started=%s\n' "$ro_started" > "$BASE/WRITE_FAILURE_ACTIVE"
 
