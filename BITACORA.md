@@ -142,32 +142,47 @@ Las pruebas corregidas con `sudo` demostraron:
 
 Esto valida el mecanismo que utilizará el watchdog: **detectar RO mediante una escritura real y no solamente leyendo las opciones de `findmnt`.**
 
-### Prueba 013 — Diseño e incorporación del watchdog forense v0.1
-
-**Resultado: IMPLEMENTADO EN REPOSITORIO; NO INSTALADO.**
-
-Se incorporó `tools/zeughaus-ro-watch`, versión 0.1, y su unidad `systemd/zeughaus-ro-watch.service`.
-
-El watchdog fue diseñado para ejecutarse como root, probar una escritura real en `/root` cada 10 segundos, guardar evidencia bajo `/run/zeughaus-ro-watch/` y no ejecutar `remount,rw` automáticamente.
-
-### Prueba 014 — Revisión y endurecimiento del watchdog v0.2
+### Prueba 013 — Diseño e incorporación del watchdog forense
 
 **Resultado: IMPLEMENTADO EN REPOSITORIO; PENDIENTE DE INSTALACIÓN/PRUEBA.**
 
-La versión 0.1 fue revisada antes de instalarse. Se detectaron dos riesgos: una captura forense podía quedar esperando indefinidamente en un comando bloqueado y `sync` podía introducir una espera precisamente durante un incidente de I/O.
+Se incorporó `tools/zeughaus-ro-watch` y su unidad `systemd/zeughaus-ro-watch.service`.
 
-La versión 0.2 incorpora:
+El watchdog ejecuta como root, prueba una escritura real en `/root` cada 10 segundos, captura un incidente cuando la escritura falla y guarda la evidencia bajo `/run/zeughaus-ro-watch/`.
 
-- timeout de 15 s por comando forense, con 2 s adicionales para matar procesos que no terminen;
-- eliminación de `sync` de la ruta crítica;
-- `INCIDENT_TRIGGER.txt` escrito **antes** de las operaciones pesadas;
-- captura de `/proc/mounts` y `/proc/self/mountinfo` además de `findmnt`;
-- captura de `btrfs filesystem df` y del subvolumen por defecto;
-- retest independiente de escritura mediante Python para conservar errno/ERRNAME;
-- conservación de `rc` y mensaje de error de la primera escritura fallida;
-- almacenamiento de la evidencia exclusivamente bajo `/run`, sin intentar reparar el filesystem.
+No intenta hacer `remount,rw` automáticamente.
 
-La versión 0.2 queda preparada para una primera prueba controlada antes de habilitarla permanentemente.
+### Prueba 014 — Watchdog v0.2 endurecido
+
+**Resultado: SUPERADO EN DISEÑO; reemplazado antes de instalación por v0.3.**
+
+La v0.2 añadió timeouts de 15 s por operación forense, eliminó `sync` de la ruta crítica, escribió `INCIDENT_TRIGGER.txt` antes de las operaciones pesadas y amplió la captura con `/proc/mounts`, `/proc/self/mountinfo` y más información Btrfs.
+
+Antes de instalarla se detectó que la prueba normal todavía dependía de analizar el texto producido por `bash`, lo que podía ser sensible a idioma/localización. Por ello se corrigió nuevamente antes de la primera instalación.
+
+### Prueba 015 — Watchdog v0.3: errno real y clasificación del incidente
+
+**Resultado: IMPLEMENTADO EN REPOSITORIO; PENDIENTE DE INSTALACIÓN/PRUEBA.**
+
+La v0.3 convierte la prueba de escritura principal en una operación Python que obtiene directamente el `errno` del kernel. Ya no se intenta inferir `EROFS` a partir del texto localizado del error.
+
+Se distinguen explícitamente:
+
+- `ro-incident`: `ERRNO=30` / `ERRNAME=EROFS`;
+- `write-failure`: cualquier otro fallo de escritura, que se conserva como pista separada y **no se interpreta automáticamente como filesystem RO**.
+
+Además:
+
+- se mantiene la captura temprana del incidente en `/run`;
+- cada operación forense conserva un timeout;
+- se captura `btrfs property get -ts / ro`;
+- el incidente registra `errno`, `errname`, mensaje y código de retorno;
+- mientras el filesystem permanezca no escribible, se registra en `/run/zeughaus-ro-watch/WRITE_FAILURE_ACTIVE` que continúa sin escritura;
+- cuando vuelve `rw`, se registra `WRITE_FAILURE_RECOVERY` con inicio y recuperación;
+- el watchdog continúa vigilando después de la recuperación;
+- no se realiza ninguna reparación automática.
+
+**La v0.3 es la versión que se instalará para la primera prueba controlada.**
 
 ## Hipótesis actuales
 
@@ -184,7 +199,7 @@ La versión 0.2 queda preparada para una primera prueba controlada antes de habi
 
 ## Próximo paso
 
-Hacer `git pull` y revisar/instalar el watchdog forense v0.2 en zeughaus. Primero se probará manualmente/como servicio sin habilitarlo permanentemente. Una vez validado, se dejará activo para capturar el próximo incidente real `rw → ro`.
+Hacer `git pull` y revisar/instalar el watchdog forense **v0.3** en zeughaus. Primero se probará manualmente/como servicio sin habilitarlo permanentemente. Una vez validado, se dejará activo para capturar el próximo incidente real `rw → ro`.
 
 Cuando ocurra un incidente, **no reiniciar inmediatamente** si la interfaz sigue respondiendo: primero se preservará la evidencia bajo `/run/zeughaus-ro-watch/`. Después de restaurar `/` a `rw`, se utilizará `zeughaus-ro-harvest` para copiarla al repositorio y analizarla.
 
