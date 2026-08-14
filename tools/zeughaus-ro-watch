@@ -1,5 +1,5 @@
 #!/bin/bash
-# zeughaus-ro-watch v0.2
+# zeughaus-ro-watch v0.3
 # Detects loss of write access to the root Btrfs filesystem and captures
 # forensic evidence into /run, which remains writable if / becomes read-only.
 
@@ -9,7 +9,6 @@ INTERVAL=10
 COMMAND_TIMEOUT=15
 BASE=/run/zeughaus-ro-watch
 TEST=/root/.zeughaus-rw-watch-test
-ERRFILE=/run/zeughaus-ro-watch/write-test-error
 
 mkdir -p "$BASE"
 chmod 700 "$BASE"
@@ -24,6 +23,30 @@ run_capture() {
     timeout --kill-after=2s "${COMMAND_TIMEOUT}s" "$@" > "$outfile" 2>&1 || true
 }
 
+write_test() {
+    local path="$1"
+    python3 - "$path" <<'PY'
+import errno, os, sys
+
+path = sys.argv[1]
+try:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, b"write-test\n")
+    finally:
+        os.close(fd)
+    os.unlink(path)
+    print("RESULT=WRITE_OK")
+    sys.exit(0)
+except OSError as e:
+    print("RESULT=WRITE_FAILED")
+    print(f"ERRNO={e.errno}")
+    print(f"ERRNAME={errno.errorcode.get(e.errno, 'UNKNOWN')}")
+    print(f"ERROR={e}")
+    sys.exit(1)
+PY
+}
+
 capture() {
     local incident="$1"
     local dir="$BASE/$incident"
@@ -35,10 +58,11 @@ capture() {
     {
         printf 'timestamp=%s\n' "$(date --iso-8601=ns)"
         printf 'errno=%s\n' "${WRITE_ERRNO:-unknown}"
+        printf 'errname=%s\n' "${WRITE_ERRNAME:-unknown}"
         printf 'error=%s\n' "${WRITE_ERROR:-unknown}"
         printf 'write_rc=%s\n' "${WRITE_RC:-unknown}"
         printf 'root_state_before_capture=\n'
-        findmnt -no TARGET,FSTYPE,OPTIONS / 2>&1 || true
+        timeout --kill-after=2s "${COMMAND_TIMEOUT}s" findmnt -no TARGET,FSTYPE,OPTIONS / 2>&1 || true
     } > "$dir/INCIDENT_TRIGGER.txt"
 
     date --iso-8601=ns > "$dir/timestamp.txt"
@@ -55,6 +79,7 @@ capture() {
     run_capture "$dir/btrfs-filesystem-df.txt" btrfs filesystem df /
     run_capture "$dir/btrfs-device-stats.txt" btrfs device stats /
     run_capture "$dir/btrfs-default-subvolume.txt" btrfs subvolume get-default /
+    run_capture "$dir/btrfs-root-property-ro.txt" btrfs property get -ts / ro
 
     run_capture "$dir/kernel-last-2000.txt" journalctl -b -k -n 2000 -o short-monotonic
     run_capture "$dir/kernel-btrfs-nvme-ro.txt" bash -c 'journalctl -b -k -n 2000 -o short-monotonic | grep -Ei "btrfs|nvme|read\.only|readonly|read-only|EROFS|I/O error|input/output|corrupt|abort|timeout|reset"'
@@ -63,23 +88,8 @@ capture() {
     run_capture "$dir/systemd-failed.txt" systemctl --failed --no-pager
     run_capture "$dir/watchdog-status.txt" systemctl status zeughaus-ro-watch.service --no-pager
 
-    # Retry the write independently so we preserve the exact errno observed
-    # while capturing the incident. Python gives us errno without parsing text.
-    run_capture "$dir/write-error-retest.txt" python3 - <<'PY'
-import errno, os
-path = "/root/.zeughaus-rw-watch-forensic-test"
-try:
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.write(fd, b"forensic-test\n")
-    os.close(fd)
-    os.unlink(path)
-    print("RESULT=WRITE_OK")
-except OSError as e:
-    print("RESULT=WRITE_FAILED")
-    print(f"ERRNO={e.errno}")
-    print(f"ERRNAME={errno.errorcode.get(e.errno, 'UNKNOWN')}")
-    print(f"ERROR={e}")
-PY
+    # Independently retest the write using the same kernel-level errno mechanism.
+    run_capture "$dir/write-error-retest.txt" write_test /root/.zeughaus-rw-watch-forensic-test
 
     printf '%s\n' "$dir" > "$BASE/LAST_INCIDENT"
     log "RO incident captured: $dir"
@@ -88,32 +98,52 @@ PY
 log "started; interval=${INTERVAL}s command_timeout=${COMMAND_TIMEOUT}s"
 
 while :; do
-    if printf '%s\n' "$(date --iso-8601=ns)" > "$TEST" 2>"$ERRFILE"; then
-        rm -f "$TEST" "$ERRFILE"
+    WRITE_OUTPUT=""
+    if WRITE_OUTPUT=$(write_test "$TEST" 2>&1); then
+        rm -f "$TEST"
     else
         rc=$?
-        err=$(cat "$ERRFILE" 2>/dev/null || true)
-        rm -f "$TEST" "$ERRFILE"
-
-        # Preserve the first observed error before running any forensic command.
         WRITE_RC="$rc"
-        WRITE_ERROR="$err"
+        WRITE_OUTPUT="$(printf '%s\n' "$WRITE_OUTPUT")"
         WRITE_ERRNO="unknown"
-        if [[ "$err" == *"Read-only file system"* ]]; then
-            WRITE_ERRNO=30
+        WRITE_ERRNAME="unknown"
+        WRITE_ERROR="$WRITE_OUTPUT"
+
+        while IFS='=' read -r key value; do
+            case "$key" in
+                ERRNO) WRITE_ERRNO="$value" ;;
+                ERRNAME) WRITE_ERRNAME="$value" ;;
+                ERROR) WRITE_ERROR="$value" ;;
+            esac
+        done <<< "$WRITE_OUTPUT"
+
+        # The exact errno is authoritative. Only EROFS (30) is a filesystem
+        # read-only incident; other errno values are retained as separate clues.
+        incident_type="write-failure"
+        if [[ "$WRITE_ERRNAME" == "EROFS" || "$WRITE_ERRNO" == "30" ]]; then
+            incident_type="ro-incident"
         fi
 
-        incident="incident-$(date +%Y%m%d-%H%M%S-%N)"
-        log "WRITE TEST FAILED rc=$rc error=$err"
+        incident="${incident_type}-$(date +%Y%m%d-%H%M%S-%N)"
+        log "WRITE TEST FAILED type=$incident_type rc=$rc errno=$WRITE_ERRNO errname=$WRITE_ERRNAME error=$WRITE_ERROR"
         capture "$incident"
 
         # Do not spam captures while the filesystem remains unwritable.
-        # Wait until write access returns before allowing another incident.
-        while ! printf '%s\n' "$(date --iso-8601=ns)" > "$TEST" 2>/dev/null; do
+        # Record the duration of the unwritable interval in /run.
+        ro_started="$(date --iso-8601=ns)"
+        printf 'started=%s\n' "$ro_started" > "$BASE/WRITE_FAILURE_ACTIVE"
+
+        while :; do
             sleep "$INTERVAL"
+            if recovery_output=$(write_test "$TEST" 2>&1); then
+                rm -f "$BASE/WRITE_FAILURE_ACTIVE" "$TEST"
+                ro_restored="$(date --iso-8601=ns)"
+                printf 'started=%s\nrestored=%s\n' "$ro_started" "$ro_restored" > "$BASE/WRITE_FAILURE_RECOVERY"
+                log "write access restored started=$ro_started restored=$ro_restored"
+                break
+            fi
+            printf '%s\n' "$(date --iso-8601=ns) still_unwritable errno=$(printf '%s\n' "$recovery_output" | awk -F= '/^ERRNO=/{print $2}')" >> "$BASE/WRITE_FAILURE_ACTIVE"
         done
-        rm -f "$TEST"
-        log "write access restored"
     fi
 
     sleep "$INTERVAL"
