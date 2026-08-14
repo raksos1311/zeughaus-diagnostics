@@ -1,0 +1,110 @@
+===== VAR LOG JOURNAL MOUNT =====
+TARGET SOURCE                FSTYPE OPTIONS
+/      /dev/nvme0n1p5[/root] btrfs  rw,relatime,seclabel,ssd,discard=async,space_cache=v2,subvolid=256,subvol=/root
+
+===== ROOT MOUNT =====
+findmnt: options --target and --source can't be used together with command line element that is not an option
+
+===== JOURNAL FLUSH STATUS =====
+● systemd-journal-flush.service - Flush Journal to Persistent Storage
+     Loaded: loaded (/usr/lib/systemd/system/systemd-journal-flush.service; static)
+    Drop-In: /usr/lib/systemd/system/service.d
+             └─10-timeout-abort.conf
+     Active: active (exited) since Thu 2026-08-13 18:59:22 -04; 3h 17min ago
+ Invocation: ba97a30ea8ca441ab2b03e39d33aa66b
+       Docs: man:systemd-journald.service(8)
+             man:journald.conf(5)
+   Main PID: 584 (code=exited, status=0/SUCCESS)
+   Mem peak: 1.6M
+        CPU: 11ms
+
+ago 13 18:59:22 zeughaus systemd[1]: Starting systemd-journal-flush.service - Flush Journal to Persistent Storage...
+ago 13 18:59:22 zeughaus systemd[1]: Finished systemd-journal-flush.service - Flush Journal to Persistent Storage.
+
+===== JOURNAL FLUSH LOG =====
+ago 13 18:59:22 zeughaus systemd[1]: Starting systemd-journal-flush.service - Flush Journal to Persistent Storage...
+ago 13 18:59:22 zeughaus systemd[1]: Finished systemd-journal-flush.service - Flush Journal to Persistent Storage.
+
+===== JOURNALD LOG =====
+ago 13 14:59:14 zeughaus systemd-journald[237]: Collecting audit messages is disabled.
+ago 13 14:59:14 zeughaus systemd-journald[237]: Journal started
+ago 13 14:59:14 zeughaus systemd-journald[237]: Runtime Journal (/run/log/journal/401557ddc7e44dd894c4a60880631a08) is 8M, max 277.4M, 269.4M free.
+ago 13 14:59:21 zeughaus systemd-journald[237]: Journal stopped
+ago 13 18:59:22 zeughaus systemd-journald[569]: Collecting audit messages is enabled.
+ago 13 18:59:22 zeughaus systemd-journald[569]: Journal started
+ago 13 18:59:22 zeughaus systemd-journald[569]: Runtime Journal (/run/log/journal/401557ddc7e44dd894c4a60880631a08) is 8M, max 277.4M, 269.4M free.
+ago 13 18:59:22 zeughaus systemd[1]: systemd-journald.service: Deactivated successfully.
+ago 13 18:59:22 zeughaus systemd-journald[569]: Runtime Journal (/run/log/journal/401557ddc7e44dd894c4a60880631a08) is 8M, max 277.4M, 269.4M free.
+ago 13 18:59:22 zeughaus systemd-journald[569]: Received client request to flush runtime journal.
+
+===== FILE ATTRIBUTES =====
+---------------C------ /var/log/journal
+---------------C------ /var/log/journal/401557ddc7e44dd894c4a60880631a08
+---------------C------ /var/log/journal/401557ddc7e44dd894c4a60880631a08/system.journal
+---------------C------ /var/log/journal/401557ddc7e44dd894c4a60880631a08/user-1000.journal
+
+===== WRITE TEST =====
+write-test exit=0
+
+===== JOURNAL FLUSH MANUAL =====
+journalctl --flush exit=0
+
+===== JOURNAL FILES AFTER FLUSH =====
+total 87M
+drwxr-sr-x+ 1 root systemd-journal  392 ago 13 22:17 .
+drwxr-sr-x+ 1 root systemd-journal   64 ago 13 22:17 ..
+-rw-r-----+ 1 root systemd-journal  40M ago 13 22:17 system@188becb18cc44aa0affe56b8fc711bea-0000000000258682-00064f9ff3a28ef4.journal
+-rw-r-----+ 1 root systemd-journal 8,0M ago 13 22:17 system.journal
+-rw-r-----+ 1 root systemd-journal  40M ago 13 22:17 user-1000@188becb18cc44aa0affe56b8fc711bea-00000000000e625a-00064f36c6b4c40d.journal
+-rw-r-----+ 1 root systemd-journal 8,0M ago 13 22:17 user-1000.journal
+  Fichero: /var/log/journal/401557ddc7e44dd894c4a60880631a08/system@188becb18cc44aa0affe56b8fc711bea-0000000000258682-00064f9ff3a28ef4.journal
+  Tamaño: 41943040  	Bloques: 61832      Bloque E/S: 4096   fichero regular
+Device: 0,37	Inode: 8812709     Links: 1
+Acceso: (0640/-rw-r-----)  Uid: (    0/    root)   Gid: (  190/systemd-journal)
+Contexto: system_u:object_r:var_log_t:s0
+      Acceso: 2026-08-13 22:17:20.705397121 -0400
+Modificación: 2026-08-13 22:17:20.629244923 -0400
+      Cambio: 2026-08-13 22:17:20.704244729 -0400
+    Creación: 2026-08-13 22:17:20.631244918 -0400
+  Fichero: /var/log/journal/401557ddc7e44dd894c4a60880631a08/system.journal
+  Tamaño: 8388608   	Bloques: 16384      Bloque E/S: 4096   fichero regular
+Device: 0,37	Inode: 8812708     Links: 1
+Acceso: (0640/-rw-r-----)  Uid: (    0/    root)   Gid: (  190/systemd-journal)
+Contexto: system_u:object_r:var_log_t:s0
+      Acceso: 2026-08-13 22:17:20.728388122 -0400
+Modificación: 2026-08-13 22:17:20.892244241 -0400
+      Cambio: 2026-08-13 22:17:20.892244241 -0400
+    Creación: 2026-08-13 22:17:20.353245640 -0400
+  Fichero: /var/log/journal/401557ddc7e44dd894c4a60880631a08/user-1000@188becb18cc44aa0affe56b8fc711bea-00000000000e625a-00064f36c6b4c40d.journal
+  Tamaño: 41943040  	Bloques: 81920      Bloque E/S: 4096   fichero regular
+Device: 0,37	Inode: 1047129     Links: 1
+Acceso: (0640/-rw-r-----)  Uid: (    0/    root)   Gid: (  190/systemd-journal)
+Contexto: system_u:object_r:var_log_t:s0
+      Acceso: 2026-08-13 22:17:20.871842422 -0400
+Modificación: 2026-08-13 22:17:20.869244300 -0400
+      Cambio: 2026-08-13 22:17:20.870244298 -0400
+    Creación: 2026-04-11 18:29:00.828055175 -0400
+  Fichero: /var/log/journal/401557ddc7e44dd894c4a60880631a08/user-1000.journal
+  Tamaño: 8388608   	Bloques: 16384      Bloque E/S: 4096   fichero regular
+Device: 0,37	Inode: 8812710     Links: 1
+Acceso: (0640/-rw-r-----)  Uid: (    0/    root)   Gid: (  190/systemd-journal)
+Contexto: system_u:object_r:var_log_t:s0
+      Acceso: 2026-08-13 22:17:20.870244298 -0400
+Modificación: 2026-08-13 22:17:20.861244321 -0400
+      Cambio: 2026-08-13 22:17:20.861244321 -0400
+    Creación: 2026-08-13 22:17:20.735244648 -0400
+
+===== JOURNAL LIST AFTER FLUSH =====
+IDX BOOT ID                          FIRST ENTRY                 LAST ENTRY
+-11 98e64245d5604276a77fd98d5ec2036f Sat 2026-04-11 18:29:00 -04 Sat 2026-04-11 18:31:21 -04
+-10 fba5d3eba9b04543929efc44a19d7478 Sat 2026-04-11 18:34:39 -04 Tue 2026-04-14 18:22:50 -04
+ -9 a23b4c1f6dd1416b9d85b5bba23d0ea4 Tue 2026-04-14 18:23:31 -04 Thu 2026-04-16 16:11:29 -04
+ -8 be992e8f1af44397bd9da43d4ecb7273 Thu 2026-04-16 23:51:22 -04 Fri 2026-04-17 00:06:39 -04
+ -7 0d1033a309754dc3b79a6dd0c8b3bdaf Fri 2026-04-17 00:08:58 -04 Fri 2026-04-17 00:12:14 -04
+ -6 5ed37a736dd847118f34653c5f21c164 Fri 2026-04-17 00:14:25 -04 Fri 2026-04-17 00:16:51 -04
+ -5 6257aa8f72b84bc1adb42ccbfde4870e Fri 2026-04-17 00:17:27 -04 Fri 2026-04-17 00:31:24 -04
+ -4 19610b1300214c7ebfdf7ad9a7ed646f Fri 2026-04-17 00:32:02 -04 Fri 2026-04-17 01:39:59 -04
+ -3 048c2aa2f412482eb56cace378df9b97 Fri 2026-04-17 01:40:32 -04 Fri 2026-04-17 03:26:47 -04
+ -2 e6330ca1e2524c9fab8b4d47fab69575 Fri 2026-04-17 03:27:28 -04 Fri 2026-04-17 03:57:29 -04
+ -1 99a71353d60c4b0093b0d5762653ee22 Thu 2026-04-16 23:57:46 -04 Fri 2026-04-17 04:47:56 -04
+  0 745d7751dda546b6b621e1d47b213157 Thu 2026-08-13 14:59:14 -04 Thu 2026-08-13 22:17:20 -04
