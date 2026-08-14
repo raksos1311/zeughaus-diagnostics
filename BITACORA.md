@@ -30,11 +30,7 @@
 
 **Resultado: OK.**
 
-`/` está actualmente montado `rw`:
-
-```text
-/dev/nvme0n1p5[/root] btrfs rw,... subvol=/root /
-```
+`/` está actualmente montado `rw`.
 
 ### Prueba 002 — `systemd-remount-fs` en el arranque actual
 
@@ -48,15 +44,7 @@ El kernel arranca inicialmente con `root=... ro`; esto es normal. El remount pos
 
 **Resultado: SIN ERRORES REGISTRADOS.**
 
-Todos los contadores de `btrfs device stats` están en cero:
-
-- write_io_errs: 0
-- read_io_errs: 0
-- flush_io_errs: 0
-- corruption_errs: 0
-- generation_errs: 0
-
-Esto reduce considerablemente la probabilidad de un error de I/O Btrfs/NVMe persistente, aunque no lo descarta completamente.
+Todos los contadores de `btrfs device stats` están en cero: write/read/flush/corruption/generation errors.
 
 ### Prueba 004 — Kernel/Btrfs/NVMe en arranque actual
 
@@ -93,34 +81,68 @@ Inicialmente parecía que `systemd-remount-fs` se ejecutaba cuatro horas despué
 
 `systemd-analyze time` demuestra que el boot completo tardó solamente **6 min 40,516 s**, y que `graphical.target` se alcanzó después de **1 min 6,824 s** de userspace. Por tanto, el remount no estuvo realmente esperando cuatro horas.
 
-La diferencia de aproximadamente cuatro horas entre timestamps del kernel y systemd apunta fuertemente a un **salto/ajuste del reloj del sistema durante el arranque** (por ejemplo, sincronización de tiempo). La hipótesis de que `systemd-remount-fs` estuviera bloqueado cuatro horas queda **descartada**.
+La diferencia de aproximadamente cuatro horas entre timestamps del kernel y systemd apunta fuertemente a un **salto/ajuste del reloj del sistema durante el arranque**. La hipótesis de que `systemd-remount-fs` estuviera bloqueado cuatro horas queda **descartada**.
 
-`systemd-analyze blame` sí identifica como demora relevante `home-oscar-scans.mount` (~42 s), además de `plymouth-quit-wait.service` (~21 s) y `NetworkManager-wait-online.service` (~9 s), pero ninguna explica un retraso de horas.
+### Prueba 008 — Localización del evento `rw → ro`
+
+**Resultado: PRUEBA INCONCLUYENTE / CORREGIDA.**
+
+El primer archivo generado quedó vacío por un problema con el filtro utilizado. No se extrae ninguna conclusión de ese archivo.
+
+Se repitió manualmente la búsqueda sobre el boot actual y posteriormente sobre `boot -1`.
+
+### Prueba 009 — Búsqueda dirigida en boot actual
+
+**Resultado: BOOT SANO.**
+
+El boot actual muestra:
+
+- Btrfs detectado y montado alrededor de 3,9 s.
+- `systemd-remount-fs` funciona alrededor de 10 s.
+- No aparecen errores Btrfs.
+- No aparecen `I/O error`, `timeout`, `reset`, `forced readonly` ni errores NVMe relevantes.
+
+Por tanto, el boot actual **no contiene evidencia de una transición `rw → ro`**.
+
+### Prueba 010 — Búsqueda dirigida en `boot -1`
+
+**Resultado: NO ES EL BOOT DEL INCIDENTE RECIENTE.**
+
+`journalctl --list-boots` mostró que el `boot -1` disponible corresponde al **17 de abril**, no al reinicio con REISUB ocurrido recientemente.
+
+La búsqueda de Btrfs/NVMe/RO en ese boot de abril tampoco mostró una causa del problema actual.
+
+Esto es importante: **el boot problemático reciente no está disponible en el journal persistente**, por lo que no podemos hacer una autopsia retrospectiva de ese incidente.
+
+El kernel del boot actual y del boot de abril muestra `Previous system reset reason [0x00080800]: software wrote 0x6 to reset control register 0xCF9`, compatible con un reset provocado por software como REISUB; esto no constituye evidencia de fallo de hardware.
 
 ## Hipótesis actuales
 
 | ID | Hipótesis | Prioridad | Estado |
 |---|---|---:|---|
-| H1 | El remount `ro → rw` falla durante determinados boots | Alta | En investigación |
-| H2 | Btrfs detecta una condición y remonta `ro` | Alta | Sin evidencia hasta ahora |
-| H3 | Otro componente vuelve a montar `/` como `ro` | Media | En investigación |
+| H1 | El remount `ro → rw` falla durante determinados boots | Alta | No demostrado; boot actual OK |
+| H2 | Btrfs detecta una condición y remonta `ro` | Alta | Sin evidencia en boots disponibles |
+| H3 | Otro componente vuelve a montar `/` como `ro` | Alta | En investigación |
 | H4 | SSHFS persistente de heinrici bloquea Nautilus | Alta | Evidencia fuerte |
 | H5 | Problema físico/controlador del NVMe no reflejado en Btrfs stats/SMART | Media-baja | No demostrado |
-| H6 | Journald no está haciendo correctamente el flush persistente durante determinados arranques | Alta | Evidencia parcial |
-| H7 | Salto de reloj durante el arranque explica la diferencia 14:59→18:59 observada en timestamps | Alta | Evidencia fuerte; pendiente de confirmar con servicio de sincronización de tiempo |
+| H6 | Journald no está haciendo correctamente el flush/persistencia durante determinados arranques | Alta | Evidencia parcial; requiere investigar configuración/unidad y preparar captura futura |
+| H7 | Salto de reloj durante el arranque explica la diferencia 14:59→18:59 observada en timestamps | Alta | Evidencia fuerte |
 | H8 | `home-oscar-scans.mount` contribuye a demoras/bloqueos durante el arranque | Media | Evidencia: ~42 s en `systemd-analyze blame` |
 
-## Próxima prueba
+## Próximo paso
 
-Investigar la sincronización/ajuste del reloj durante el arranque para confirmar H7 y, simultáneamente, revisar por qué `systemd-journal-flush` no está dejando el journal persistente automáticamente.
+No podemos investigar retrospectivamente el incidente de ayer porque ese boot no está disponible en el journal. Antes de tocar Btrfs, debemos asegurar que el próximo incidente quede registrado persistentemente.
 
-Después se retomará el diagnóstico de la causa real del estado `ro` en los boots problemáticos.
+Siguiente línea de trabajo: inspeccionar `systemd-journald`, `systemd-journal-flush`, su configuración efectiva (`Storage=`/drop-ins), y el momento en que el journal pasa de runtime a persistent. Después podremos preparar una captura robusta del eventual `rw → ro`.
+
+No ejecutar todavía `btrfs check`, scrub ni reparaciones a ciegas.
 
 ## Pendientes posteriores
 
 - Migrar `/home/oscar/heinrici` desde `~/.config/autostart/heinrici.desktop` a systemd user + automount, evitando bloqueos de Nautilus cuando `heinrici` está apagado.
 - Revisar `loginctl`/`systemd --user` y configurar linger correctamente para servicios persistentes.
 - Investigar el error histórico de sincronización de caché de `/dev/sda` (KIOXIA `KBG40ZNV512G`) visto en el boot de abril, separándolo del NVMe raíz.
+- Corregir posteriormente la configuración RTC/UTC, pero sin mezclar esa modificación con el diagnóstico del filesystem.
 
 ## Regla de trabajo
 
