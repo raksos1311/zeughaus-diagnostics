@@ -142,26 +142,32 @@ Las pruebas corregidas con `sudo` demostraron:
 
 Esto valida el mecanismo que utilizará el watchdog: **detectar RO mediante una escritura real y no solamente leyendo las opciones de `findmnt`.**
 
-### Prueba 013 — Diseño e incorporación del watchdog forense
+### Prueba 013 — Diseño e incorporación del watchdog forense v0.1
 
-**Resultado: IMPLEMENTADO EN REPOSITORIO; PENDIENTE DE INSTALACIÓN/PRUEBA.**
+**Resultado: IMPLEMENTADO EN REPOSITORIO; NO INSTALADO.**
 
 Se incorporó `tools/zeughaus-ro-watch`, versión 0.1, y su unidad `systemd/zeughaus-ro-watch.service`.
 
-El watchdog:
+El watchdog fue diseñado para ejecutarse como root, probar una escritura real en `/root` cada 10 segundos, guardar evidencia bajo `/run/zeughaus-ro-watch/` y no ejecutar `remount,rw` automáticamente.
 
-- ejecuta como root;
-- prueba una escritura real en `/root` cada 10 segundos;
-- captura un incidente cuando la escritura falla;
-- guarda la evidencia bajo `/run/zeughaus-ro-watch/`, que es `tmpfs` y debe seguir siendo escribible si `/` pasa a `ro`;
-- captura estado de mounts, Btrfs, kernel, NVMe/RO, journal y unidades fallidas;
-- registra el incidente en el journal mediante `systemd-cat`;
-- evita inundar `/run` con capturas repetidas mientras `/` siga sin escritura;
-- no intenta hacer `remount,rw` automáticamente.
+### Prueba 014 — Revisión y endurecimiento del watchdog v0.2
 
-También se incorporó `tools/zeughaus-ro-harvest`, que permite copiar el último incidente desde `/run` al repositorio después de restaurar `/` a `rw`.
+**Resultado: IMPLEMENTADO EN REPOSITORIO; PENDIENTE DE INSTALACIÓN/PRUEBA.**
 
-**Importante:** todavía no se ha instalado ni habilitado el servicio. La siguiente acción es hacer `git pull`, instalarlo manualmente y probar primero su funcionamiento normal.
+La versión 0.1 fue revisada antes de instalarse. Se detectaron dos riesgos: una captura forense podía quedar esperando indefinidamente en un comando bloqueado y `sync` podía introducir una espera precisamente durante un incidente de I/O.
+
+La versión 0.2 incorpora:
+
+- timeout de 15 s por comando forense, con 2 s adicionales para matar procesos que no terminen;
+- eliminación de `sync` de la ruta crítica;
+- `INCIDENT_TRIGGER.txt` escrito **antes** de las operaciones pesadas;
+- captura de `/proc/mounts` y `/proc/self/mountinfo` además de `findmnt`;
+- captura de `btrfs filesystem df` y del subvolumen por defecto;
+- retest independiente de escritura mediante Python para conservar errno/ERRNAME;
+- conservación de `rc` y mensaje de error de la primera escritura fallida;
+- almacenamiento de la evidencia exclusivamente bajo `/run`, sin intentar reparar el filesystem.
+
+La versión 0.2 queda preparada para una primera prueba controlada antes de habilitarla permanentemente.
 
 ## Hipótesis actuales
 
@@ -178,7 +184,7 @@ También se incorporó `tools/zeughaus-ro-harvest`, que permite copiar el últim
 
 ## Próximo paso
 
-Hacer `git pull` y revisar/instalar el watchdog forense en zeughaus. Primero se probará manualmente/como servicio sin habilitarlo permanentemente. Una vez validado, se dejará activo para capturar el próximo incidente real `rw → ro`.
+Hacer `git pull` y revisar/instalar el watchdog forense v0.2 en zeughaus. Primero se probará manualmente/como servicio sin habilitarlo permanentemente. Una vez validado, se dejará activo para capturar el próximo incidente real `rw → ro`.
 
 Cuando ocurra un incidente, **no reiniciar inmediatamente** si la interfaz sigue respondiendo: primero se preservará la evidencia bajo `/run/zeughaus-ro-watch/`. Después de restaurar `/` a `rw`, se utilizará `zeughaus-ro-harvest` para copiarla al repositorio y analizarla.
 
