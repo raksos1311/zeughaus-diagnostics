@@ -1,0 +1,36 @@
+#!/bin/bash
+# Copy the most recent forensic incident from /run into the diagnostics repo.
+# Run this only after / has been restored to rw.
+
+set -euo pipefail
+
+REPO="/home/oscar/zeughaus/zeughaus-diagnostics"
+BASE="/run/zeughaus-ro-watch"
+
+if [[ ! -d "$REPO/.git" ]]; then
+    echo "ERROR: diagnostics repository not found at $REPO" >&2
+    exit 1
+fi
+
+if [[ ! -f "$BASE/LAST_INCIDENT" ]]; then
+    echo "ERROR: no RO incident has been captured." >&2
+    exit 1
+fi
+
+INCIDENT_DIR=$(cat "$BASE/LAST_INCIDENT")
+if [[ ! -d "$INCIDENT_DIR" ]]; then
+    echo "ERROR: incident directory does not exist: $INCIDENT_DIR" >&2
+    exit 1
+fi
+
+DEST="$REPO/incidents/$(basename "$INCIDENT_DIR")"
+mkdir -p "$DEST"
+cp -a "$INCIDENT_DIR"/. "$DEST"/
+
+cd "$REPO"
+git add "$DEST"
+git status --short
+
+echo
+echo "Incident copied to: $DEST"
+echo "Review the files above before committing/pushing."
