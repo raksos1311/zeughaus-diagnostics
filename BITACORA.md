@@ -171,18 +171,62 @@ Se distinguen explícitamente:
 - `ro-incident`: `ERRNO=30` / `ERRNAME=EROFS`;
 - `write-failure`: cualquier otro fallo de escritura, que se conserva como pista separada y **no se interpreta automáticamente como filesystem RO**.
 
-Además:
+Además se mantiene la captura temprana del incidente, los timeouts, la captura de `btrfs property get -ts / ro`, el registro de duración de la indisponibilidad y la ausencia de reparación automática.
 
-- se mantiene la captura temprana del incidente en `/run`;
-- cada operación forense conserva un timeout;
-- se captura `btrfs property get -ts / ro`;
-- el incidente registra `errno`, `errname`, mensaje y código de retorno;
-- mientras el filesystem permanezca no escribible, se registra en `/run/zeughaus-ro-watch/WRITE_FAILURE_ACTIVE` que continúa sin escritura;
-- cuando vuelve `rw`, se registra `WRITE_FAILURE_RECOVERY` con inicio y recuperación;
-- el watchdog continúa vigilando después de la recuperación;
-- no se realiza ninguna reparación automática.
+### Prueba 016 — Corrección del watchdog v0.4
 
-**La v0.3 es la versión que se instalará para la primera prueba controlada.**
+**Resultado: CORREGIDO EN REPOSITORIO; PENDIENTE DE INSTALACIÓN/PRUEBA.**
+
+Se detectó un bug en v0.3: el bloque de captura ejecutaba la función Bash `write_test` directamente como argumento de `timeout`. `timeout` necesita ejecutar un programa externo; una función Bash no puede utilizarse de esa forma.
+
+La v0.4 corrige la ruta de la prueba forense para que pueda ejecutarse bajo un límite temporal y conserva el mecanismo de obtención directa de `errno` mediante Python.
+
+La sintaxis local de `tools/zeughaus-ro-watch` fue validada con:
+
+```bash
+bash -n tools/zeughaus-ro-watch
+```
+
+**Resultado: OK.**
+
+Commit de corrección: `2bec0d904207f2f6c5a6b747658ac83b63cc1883`.
+
+### Prueba 017 — Definición del servicio systemd
+
+**Resultado: DEFINIDO EN REPOSITORIO; PENDIENTE DE INSTALACIÓN.**
+
+Se actualizó `systemd/zeughaus-ro-watch.service` para ejecutar exactamente el binario que ya fue instalado localmente en `/usr/local/sbin/zeughaus-ro-watch`.
+
+Configuración registrada:
+
+- `Type=simple`;
+- `Restart=always`;
+- `RestartSec=5`;
+- ejecución como `root`;
+- `UMask=0077`;
+- evidencia bajo `/run`;
+- sin `ProtectSystem`, porque el watchdog debe poder observar/escribir su prueba sobre `/` antes de que el filesystem pueda pasar a RO;
+- `WantedBy=multi-user.target` para su posterior habilitación.
+
+El servicio **todavía no está instalado ni habilitado** en el sistema en este punto de la investigación.
+
+### Prueba 018 — Intento de arranque antes de crear la unidad local
+
+**Resultado: ESPERADO / SIN EFECTO.**
+
+Se ejecutó:
+
+```bash
+sudo systemctl start zeughaus-ro-watch.service
+```
+
+systemd respondió:
+
+```text
+Unit zeughaus-ro-watch.service not found.
+```
+
+Esto confirma que no existía una unidad local activa antes de la instalación planificada.
 
 ## Hipótesis actuales
 
@@ -199,11 +243,26 @@ Además:
 
 ## Próximo paso
 
-Hacer `git pull` y revisar/instalar el watchdog forense **v0.3** en zeughaus. Primero se probará manualmente/como servicio sin habilitarlo permanentemente. Una vez validado, se dejará activo para capturar el próximo incidente real `rw → ro`.
+Hacer `git pull` y revisar/instalar el unit file del watchdog. Después se ejecutará `daemon-reload`, se arrancará **sin habilitarlo todavía para el boot** y se verificará su funcionamiento durante la sesión actual. Sólo después de esa prueba se habilitará para futuros arranques.
 
-Cuando ocurra un incidente, **no reiniciar inmediatamente** si la interfaz sigue respondiendo: primero se preservará la evidencia bajo `/run/zeughaus-ro-watch/`. Después de restaurar `/` a `rw`, se utilizará `zeughaus-ro-harvest` para copiarla al repositorio y analizarla.
+Cuando ocurra un incidente, **no reiniciar inmediatamente** si la interfaz sigue respondiendo: primero se preservará la evidencia bajo `/run/zeughaus-ro-watch/`. Después de restaurar `/` a `rw`, se utilizará el procedimiento de cosecha para copiarla al repositorio y analizarla.
 
 No ejecutar todavía `btrfs check`, scrub ni reparaciones a ciegas.
+
+## Desinstalación posterior obligatoria
+
+Este watchdog es una herramienta **temporal de diagnóstico**, no una configuración permanente del sistema.
+
+Al finalizar la investigación:
+
+1. detener el servicio;
+2. deshabilitarlo si fue habilitado;
+3. eliminar `/etc/systemd/system/zeughaus-ro-watch.service`;
+4. eliminar `/usr/local/sbin/zeughaus-ro-watch`;
+5. ejecutar `systemctl daemon-reload`;
+6. conservar en el repositorio el registro de instalación, funcionamiento y eliminación.
+
+La bitácora debe reflejar la configuración real utilizada, no una versión idealizada del sistema.
 
 ## Pendientes posteriores
 
