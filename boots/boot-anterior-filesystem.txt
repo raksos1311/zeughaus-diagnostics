@@ -1,0 +1,32 @@
+abr 16 23:57:46 fedora-dev kernel: Btrfs loaded, zoned=yes, fsverity=yes
+abr 16 23:57:46 fedora-dev kernel: RAS: Correctable Errors collector initialized.
+abr 16 23:57:46 fedora-dev kernel: Write protecting the kernel read-only data: 43008k
+abr 16 23:57:46 fedora-dev systemd[1]: Successfully made /usr/ read-only.
+abr 16 23:57:47 fedora-dev kernel: nvme nvme0: pci function 0000:01:00.0
+abr 16 23:57:47 fedora-dev kernel: nvme nvme0: allocated 64 MiB host memory buffer (1 segment).
+abr 16 23:57:47 fedora-dev kernel: nvme nvme0: 8/0/0 default/read/poll queues
+abr 16 23:57:47 fedora-dev kernel:  nvme0n1: p1 p2 p3 p4 p5 p6
+abr 16 23:57:48 fedora-dev kernel: BTRFS: device label fedora devid 1 transid 26175 /dev/nvme0n1p6 (259:6) scanned by mount (438)
+abr 16 23:57:48 fedora-dev kernel: BTRFS info (device nvme0n1p6): first mount of filesystem 8ccfa1f6-6a4d-48a5-abe0-76ecee6bfd15
+abr 16 23:57:48 fedora-dev kernel: BTRFS info (device nvme0n1p6): using crc32c (crc32c-lib) checksum algorithm
+abr 16 23:57:48 fedora-dev kernel: BTRFS info (device nvme0n1p6): enabling ssd optimizations
+abr 16 23:57:48 fedora-dev kernel: BTRFS info (device nvme0n1p6): turning on async discard
+abr 16 23:57:48 fedora-dev kernel: BTRFS info (device nvme0n1p6): enabling free space tree
+abr 17 03:57:54 fedora-dev systemd[1]: Starting systemd-remount-fs.service - Remount Root and Kernel File Systems...
+abr 17 03:57:54 fedora-dev kernel: BTRFS info (device nvme0n1p6 state M): use zstd compression, level 1
+abr 17 03:57:54 fedora-dev systemd[1]: Finished systemd-remount-fs.service - Remount Root and Kernel File Systems.
+abr 17 03:57:55 fedora-dev kernel: EXT4-fs (nvme0n1p5): mounted filesystem de016213-874e-468e-bff1-048461e7c31a r/w with ordered data mode. Quota mode: none.
+abr 17 03:57:55 fedora-dev kernel: ee1004 3-0050: 512 byte EE1004-compliant SPD EEPROM, read-only
+abr 17 03:57:55 fedora-dev kernel: ee1004 3-0051: 512 byte EE1004-compliant SPD EEPROM, read-only
+abr 17 03:57:56 fedora-dev kernel: nvme nvme0: using unchecked data buffer
+abr 17 03:57:56 fedora-dev kernel: block nvme0n1: No UUID available providing old NGUID
+abr 17 03:57:56 fedora-dev kernel: ntfs3: Read-only LZX/Xpress compression included
+abr 17 03:57:57 fedora-dev kernel: ACPI BIOS Error (bug): AE_AML_BUFFER_LIMIT, Index (0x000000032) is beyond end of object (length 0x32) (20250807/exoparg2-393)
+abr 17 03:57:57 fedora-dev kernel: ACPI Error: Aborting method \_SB.WMID.WQBE due to previous error (AE_AML_BUFFER_LIMIT) (20250807/psparse-529)
+abr 17 03:57:57 fedora-dev kernel: ACPI BIOS Error (bug): AE_AML_BUFFER_LIMIT, Field [D008] at bit offset/length 128/8 exceeds size of target Buffer (128 bits) (20250807/dsopcode-198)
+abr 17 03:57:57 fedora-dev kernel: ACPI Error: Aborting method \HWMC due to previous error (AE_AML_BUFFER_LIMIT) (20250807/psparse-529)
+abr 17 03:57:57 fedora-dev kernel: ACPI Error: Aborting method \_SB.WMID.WMAA due to previous error (AE_AML_BUFFER_LIMIT) (20250807/psparse-529)
+abr 17 03:57:57 fedora-dev kernel: hp_bioscfg: Returned error 0x300a, "Generic/Other error"
+abr 17 04:47:53 fedora-dev kernel: sd 1:0:0:0: [sda] Synchronize Cache(10) failed: Result: hostbyte=DID_ERROR driverbyte=DRIVER_OK
+abr 17 04:47:56 fedora-dev kernel: EXT4-fs (nvme0n1p5): unmounting filesystem de016213-874e-468e-bff1-048461e7c31a.
+abr 17 04:47:56 fedora-dev kernel: audit: type=1131 audit(1776415676.359:2063): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=system_u:system_r:init_t:s0 msg='unit=systemd-remount-fs comm="systemd" exe="/usr/lib/systemd/systemd" hostname=? addr=? terminal=? res=success'
