@@ -1,17 +1,21 @@
 [Unit]
-Description=Zeughaus root filesystem RO forensic watchdog
+Description=Zeughaus Btrfs read-only filesystem watchdog
 Documentation=https://github.com/raksos1311/zeughaus-diagnostics
 After=local-fs.target
 Wants=local-fs.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/libexec/zeughaus-ro-watch
+ExecStart=/usr/local/sbin/zeughaus-ro-watch
 Restart=always
 RestartSec=5
+TimeoutStopSec=10
 User=root
 Group=root
 UMask=0077
+
+# The watchdog must continue operating if / becomes read-only.
+# Its forensic state is stored under /run (tmpfs).
 NoNewPrivileges=no
 
 [Install]
