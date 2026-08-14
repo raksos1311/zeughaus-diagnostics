@@ -1,0 +1,40 @@
+===== JOURNAL DIRECTORIOS =====
+/var/log/journal/401557ddc7e44dd894c4a60880631a08/user-1000.journal 41943040 bytes
+/var/log/journal/401557ddc7e44dd894c4a60880631a08/system.journal 16777216 bytes
+
+===== JOURNAL STORAGE =====
+Archived and active journals take up 83.8M in the file system.
+
+===== JOURNAL CONFIG =====
+
+===== BOOTS DISPONIBLES =====
+IDX BOOT ID                          FIRST ENTRY                 LAST ENTRY
+-11 98e64245d5604276a77fd98d5ec2036f Sat 2026-04-11 18:29:00 -04 Sat 2026-04-11 18:31:21 -04
+-10 fba5d3eba9b04543929efc44a19d7478 Sat 2026-04-11 18:34:39 -04 Tue 2026-04-14 18:22:50 -04
+ -9 a23b4c1f6dd1416b9d85b5bba23d0ea4 Tue 2026-04-14 18:23:31 -04 Thu 2026-04-16 16:11:29 -04
+ -8 be992e8f1af44397bd9da43d4ecb7273 Thu 2026-04-16 23:51:22 -04 Fri 2026-04-17 00:06:39 -04
+ -7 0d1033a309754dc3b79a6dd0c8b3bdaf Fri 2026-04-17 00:08:58 -04 Fri 2026-04-17 00:12:14 -04
+ -6 5ed37a736dd847118f34653c5f21c164 Fri 2026-04-17 00:14:25 -04 Fri 2026-04-17 00:16:51 -04
+ -5 6257aa8f72b84bc1adb42ccbfde4870e Fri 2026-04-17 00:17:27 -04 Fri 2026-04-17 00:31:24 -04
+ -4 19610b1300214c7ebfdf7ad9a7ed646f Fri 2026-04-17 00:32:02 -04 Fri 2026-04-17 01:39:59 -04
+ -3 048c2aa2f412482eb56cace378df9b97 Fri 2026-04-17 01:40:32 -04 Fri 2026-04-17 03:26:47 -04
+ -2 e6330ca1e2524c9fab8b4d47fab69575 Fri 2026-04-17 03:27:28 -04 Fri 2026-04-17 03:57:29 -04
+ -1 99a71353d60c4b0093b0d5762653ee22 Thu 2026-04-16 23:57:46 -04 Fri 2026-04-17 04:47:56 -04
+  0 745d7751dda546b6b621e1d47b213157 Thu 2026-08-13 14:59:14 -04 Thu 2026-08-13 22:04:17 -04
+
+===== DISPOSITIVOS =====
+NAME        MODEL               SERIAL             SIZE FSTYPE LABEL             MOUNTPOINTS
+sda         KBG40ZNV512G KIOXIA X05PG7PRQ9D2     476,9G                          
+└─sda1                                           476,9G ntfs   SSD_AMARILLO      /home/oscar/discos/feo-amarillo
+sdb         ST1000LM035-1RK172  WDEJVQFG         931,5G                          
+└─sdb1                                           931,5G ntfs   HDD_AZUL_RESPALDO /home/oscar/discos/feo-azul
+zram0                                                8G swap   zram0             [SWAP]
+nvme0n1     KINGSTON SNV2S1000G 50026B77853A8B5F 931,5G                          
+├─nvme0n1p1                                        260M vfat                     /boot/efi
+├─nvme0n1p2                                         16M                          
+├─nvme0n1p3                                        350G ntfs   Windows           
+├─nvme0n1p4                                          2G ext4                     /boot
+├─nvme0n1p5                                      108,5G btrfs  fedora            /home
+│                                                                                /
+├─nvme0n1p6                                        740M ntfs                     
+└─nvme0n1p7                                      341,8G ext4                     /home/oscar/mnt/rescate
