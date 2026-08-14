@@ -1,13 +1,15 @@
 #!/bin/bash
-# zeughaus-ro-watch v0.1
+# zeughaus-ro-watch v0.2
 # Detects loss of write access to the root Btrfs filesystem and captures
 # forensic evidence into /run, which remains writable if / becomes read-only.
 
 set -u
 
 INTERVAL=10
+COMMAND_TIMEOUT=15
 BASE=/run/zeughaus-ro-watch
 TEST=/root/.zeughaus-rw-watch-test
+ERRFILE=/run/zeughaus-ro-watch/write-test-error
 
 mkdir -p "$BASE"
 chmod 700 "$BASE"
@@ -16,34 +18,55 @@ log() {
     printf '%s %s\n' "$(date --iso-8601=ns)" "$*" | systemd-cat -t zeughaus-ro-watch -p info
 }
 
+run_capture() {
+    local outfile="$1"
+    shift
+    timeout --kill-after=2s "${COMMAND_TIMEOUT}s" "$@" > "$outfile" 2>&1 || true
+}
+
 capture() {
     local incident="$1"
     local dir="$BASE/$incident"
     mkdir -p "$dir"
     chmod 700 "$dir"
 
+    # Write the minimal trigger record first. If a later forensic command hangs,
+    # this file still tells us exactly why and when the incident was triggered.
+    {
+        printf 'timestamp=%s\n' "$(date --iso-8601=ns)"
+        printf 'errno=%s\n' "${WRITE_ERRNO:-unknown}"
+        printf 'error=%s\n' "${WRITE_ERROR:-unknown}"
+        printf 'write_rc=%s\n' "${WRITE_RC:-unknown}"
+        printf 'root_state_before_capture=\n'
+        findmnt -no TARGET,FSTYPE,OPTIONS / 2>&1 || true
+    } > "$dir/INCIDENT_TRIGGER.txt"
+
     date --iso-8601=ns > "$dir/timestamp.txt"
     printf 'hostname=%s\n' "$(hostname)" > "$dir/host.txt"
 
-    findmnt -T / > "$dir/root-mount.txt" 2>&1 || true
-    findmnt -T /run > "$dir/run-mount.txt" 2>&1 || true
-    mount > "$dir/mounts.txt" 2>&1 || true
+    run_capture "$dir/root-mount.txt" findmnt -T /
+    run_capture "$dir/run-mount.txt" findmnt -T /run
+    run_capture "$dir/mounts.txt" mount
+    run_capture "$dir/proc-mounts.txt" cat /proc/mounts
+    run_capture "$dir/proc-mountinfo.txt" cat /proc/self/mountinfo
 
-    btrfs filesystem show / > "$dir/btrfs-filesystem-show.txt" 2>&1 || true
-    btrfs filesystem usage / > "$dir/btrfs-filesystem-usage.txt" 2>&1 || true
-    btrfs device stats / > "$dir/btrfs-device-stats.txt" 2>&1 || true
+    run_capture "$dir/btrfs-filesystem-show.txt" btrfs filesystem show /
+    run_capture "$dir/btrfs-filesystem-usage.txt" btrfs filesystem usage /
+    run_capture "$dir/btrfs-filesystem-df.txt" btrfs filesystem df /
+    run_capture "$dir/btrfs-device-stats.txt" btrfs device stats /
+    run_capture "$dir/btrfs-default-subvolume.txt" btrfs subvolume get-default /
 
-    journalctl -b -k -n 2000 -o short-monotonic > "$dir/kernel-last-2000.txt" 2>&1 || true
-    journalctl -b -k -n 2000 -o short-monotonic | grep -Ei 'btrfs|nvme|read.only|readonly|read-only|EROFS|I/O error|input/output|corrupt|abort|timeout|reset' > "$dir/kernel-btrfs-nvme-ro.txt" 2>&1 || true
-    journalctl -b -n 2000 -o short-monotonic | grep -Ei 'Read-only file system|read-only|readonly|EROFS|I/O error|Input/output error' > "$dir/journal-ro-errors.txt" 2>&1 || true
+    run_capture "$dir/kernel-last-2000.txt" journalctl -b -k -n 2000 -o short-monotonic
+    run_capture "$dir/kernel-btrfs-nvme-ro.txt" bash -c 'journalctl -b -k -n 2000 -o short-monotonic | grep -Ei "btrfs|nvme|read\.only|readonly|read-only|EROFS|I/O error|input/output|corrupt|abort|timeout|reset"'
+    run_capture "$dir/journal-ro-errors.txt" bash -c 'journalctl -b -n 2000 -o short-monotonic | grep -Ei "Read-only file system|read-only|readonly|EROFS|I/O error|Input/output error"'
 
-    systemctl --failed --no-pager > "$dir/systemd-failed.txt" 2>&1 || true
-    systemctl status zeughaus-ro-watch.service --no-pager > "$dir/watchdog-status.txt" 2>&1 || true
+    run_capture "$dir/systemd-failed.txt" systemctl --failed --no-pager
+    run_capture "$dir/watchdog-status.txt" systemctl status zeughaus-ro-watch.service --no-pager
 
-    # Record the exact write-test errno using Python; Python is part of Fedora's
-    # base installation and exposes errno reliably without relying on shell text.
-    python3 - "$dir/write-error.txt" <<'PY' 2>&1
-import errno, os, sys, time
+    # Retry the write independently so we preserve the exact errno observed
+    # while capturing the incident. Python gives us errno without parsing text.
+    run_capture "$dir/write-error-retest.txt" python3 - <<'PY'
+import errno, os
 path = "/root/.zeughaus-rw-watch-forensic-test"
 try:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -52,26 +75,33 @@ try:
     os.unlink(path)
     print("RESULT=WRITE_OK")
 except OSError as e:
-    print(f"RESULT=WRITE_FAILED")
+    print("RESULT=WRITE_FAILED")
     print(f"ERRNO={e.errno}")
     print(f"ERRNAME={errno.errorcode.get(e.errno, 'UNKNOWN')}")
     print(f"ERROR={e}")
 PY
 
-    sync
     printf '%s\n' "$dir" > "$BASE/LAST_INCIDENT"
     log "RO incident captured: $dir"
 }
 
-log "started; interval=${INTERVAL}s"
+log "started; interval=${INTERVAL}s command_timeout=${COMMAND_TIMEOUT}s"
 
 while :; do
-    if printf '%s\n' "$(date --iso-8601=ns)" > "$TEST" 2>/tmp/zeughaus-ro-watch-error; then
-        rm -f "$TEST" /tmp/zeughaus-ro-watch-error
+    if printf '%s\n' "$(date --iso-8601=ns)" > "$TEST" 2>"$ERRFILE"; then
+        rm -f "$TEST" "$ERRFILE"
     else
         rc=$?
-        err=$(cat /tmp/zeughaus-ro-watch-error 2>/dev/null || true)
-        rm -f "$TEST" /tmp/zeughaus-ro-watch-error
+        err=$(cat "$ERRFILE" 2>/dev/null || true)
+        rm -f "$TEST" "$ERRFILE"
+
+        # Preserve the first observed error before running any forensic command.
+        WRITE_RC="$rc"
+        WRITE_ERROR="$err"
+        WRITE_ERRNO="unknown"
+        if [[ "$err" == *"Read-only file system"* ]]; then
+            WRITE_ERRNO=30
+        fi
 
         incident="incident-$(date +%Y%m%d-%H%M%S-%N)"
         log "WRITE TEST FAILED rc=$rc error=$err"
