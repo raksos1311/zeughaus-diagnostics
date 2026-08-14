@@ -26,23 +26,37 @@ El watchdog escribe una pequeña prueba cada 10 s contra `/root`. Si la operaci�
 
 La versión actual es **v0.4**.
 
+### Unidad systemd
+
+El servicio queda definido en `systemd/zeughaus-ro-watch.service` y ejecutará `/usr/local/sbin/zeughaus-ro-watch` como `root`.
+
+Características deliberadas:
+
+- `Restart=always` para recuperar el watchdog si el proceso termina.
+- estado forense bajo `/run`, que es `tmpfs` y no depende de que `/` siga siendo escribible.
+- sin `ProtectSystem`, porque el objetivo es detectar precisamente cambios de estado de `/`.
+- todavía **no está habilitado ni instalado como servicio** en esta etapa; primero se hará `git pull`, se instalará la unidad localmente y se probará durante la sesión actual.
+
 ### Corrección v0.4
 
 En v0.3, el forense intentaba ejecutar la función Bash `write_test` directamente mediante `timeout`. `timeout` sólo puede ejecutar un programa externo, por lo que esa segunda prueba habría fallado aunque el watchdog principal hubiese detectado correctamente `EROFS`.
 
-v0.4 exporta `write_test` y lo ejecuta mediante `timeout -> bash`, conservando el límite temporal.
+v0.4 corrige la ejecución de la prueba forense y conserva el `errno` real de la operación de escritura.
 
 Commit: `2bec0d904207f2f6c5a6b747658ac83b63cc1883`
 
 ## Próximo procedimiento
 
-1. Hacer `git pull` y revisar v0.4 localmente.
-2. Validar sintaxis y ejecutar una prueba controlada del watchdog.
-3. Instalarlo como servicio systemd.
-4. No automatizar todavía ningún `remount,rw`: durante la investigación queremos preservar el estado original del incidente.
-5. Cuando vuelva a ocurrir el RO, conservar primero el incidente generado en `/run`.
-6. Analizar `INCIDENT_TRIGGER.txt`, `write-error-retest.txt`, estado Btrfs, estado de montaje y mensajes kernel capturados.
-7. Sólo después decidir si corresponde corregir Btrfs, systemd, kernel/firmware, configuración de montaje o hardware.
+1. Hacer `git pull`.
+2. Instalar el unit file en `/etc/systemd/system/` y ejecutar `daemon-reload`.
+3. Arrancar el watchdog **sin habilitarlo todavía para el boot**.
+4. Verificar que el servicio funciona y que `/run/zeughaus-ro-watch` recibe los datos esperados.
+5. Habilitarlo sólo después de superar la prueba de funcionamiento.
+6. No automatizar todavía ningún `remount,rw`: durante la investigación queremos preservar el estado original del incidente.
+7. Cuando vuelva a ocurrir el RO, conservar primero el incidente generado en `/run`.
+8. Analizar `INCIDENT_TRIGGER.txt`, `write-error-retest.txt`, estado Btrfs, estado de montaje y mensajes kernel capturados.
+9. Al terminar la investigación, **eliminar el servicio y el watchdog** y registrar explícitamente esa desinstalación en la bitácora.
+10. Sólo después decidir si corresponde corregir Btrfs, systemd, kernel/firmware, configuración de montaje o hardware.
 
 ## SSHFS hacia heinrici
 
