@@ -1,0 +1,18 @@
+[Unit]
+Description=Zeughaus root filesystem RO forensic watchdog
+Documentation=https://github.com/raksos1311/zeughaus-diagnostics
+After=local-fs.target
+Wants=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/zeughaus-ro-watch
+Restart=always
+RestartSec=5
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=no
+
+[Install]
+WantedBy=multi-user.target
