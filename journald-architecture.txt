@@ -1,0 +1,257 @@
+===== JOURNALD CONFIG EFFECTIVE =====
+# /usr/lib/systemd/journald.conf
+#  This file is part of systemd.
+#
+#  systemd is free software; you can redistribute it and/or modify it under the
+#  terms of the GNU Lesser General Public License as published by the Free
+#  Software Foundation; either version 2.1 of the License, or (at your option)
+#  any later version.
+#
+# Entries in this file show the compile time defaults. Local configuration
+# should be created by either modifying this file (or a copy of it placed in
+# /etc/ if the original file is shipped in /usr/), or by creating "drop-ins" in
+# the /etc/systemd/journald.conf.d/ directory. The latter is generally
+# recommended. Defaults can be restored by simply deleting the main
+# configuration file and all drop-ins located in /etc/.
+#
+# Use 'systemd-analyze cat-config systemd/journald.conf' to display the full config.
+#
+# See journald.conf(5) for details.
+
+[Journal]
+#Storage=auto
+#Compress=yes
+#Seal=yes
+#SplitMode=uid
+#SyncIntervalSec=5m
+#RateLimitIntervalSec=30s
+#RateLimitBurst=10000
+#SystemMaxUse=
+#SystemKeepFree=
+#SystemMaxFileSize=
+#SystemMaxFiles=100
+#RuntimeMaxUse=
+#RuntimeKeepFree=
+#RuntimeMaxFileSize=
+#RuntimeMaxFiles=100
+#MaxRetentionSec=0
+#MaxFileSec=1month
+#ForwardToSyslog=no
+#ForwardToKMsg=no
+#ForwardToConsole=no
+#ForwardToWall=yes
+#TTYPath=/dev/console
+#MaxLevelStore=debug
+#MaxLevelSyslog=debug
+#MaxLevelKMsg=notice
+#MaxLevelConsole=info
+#MaxLevelWall=emerg
+#MaxLevelSocket=debug
+#LineMax=48K
+#ReadKMsg=yes
+#Audit=yes
+
+===== JOURNALD UNIT =====
+# /usr/lib/systemd/system/systemd-journald.service
+#  SPDX-License-Identifier: LGPL-2.1-or-later
+#
+#  This file is part of systemd.
+#
+#  systemd is free software; you can redistribute it and/or modify it
+#  under the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation; either version 2.1 of the License, or
+#  (at your option) any later version.
+
+[Unit]
+Description=Journal Service
+Documentation=man:systemd-journald.service(8) man:journald.conf(5)
+DefaultDependencies=no
+Requires=systemd-journald.socket
+After=systemd-journald.socket systemd-journald-dev-log.socket systemd-journald-audit.socket syslog.socket
+Before=sysinit.target
+
+# To avoid journald being SIGKILLed during soft-reboot and corrupting journals.
+# See https://github.com/systemd/systemd/issues/30195
+# Note, typically soft-reboot.target will be never reached,
+# and systemd-soft-reboot.service will trigger soft-reboot.
+# Hence, this must be stopped before systemd-soft-reboot.service.
+Before=soft-reboot.target systemd-soft-reboot.service
+Conflicts=soft-reboot.target
+
+# Mount and swap units need the journal socket units. If they were removed by
+# an isolate request the mount and swap units would be removed too, hence let's
+# exclude systemd-journald and its sockets from isolate requests.
+IgnoreOnIsolate=yes
+
+[Service]
+DeviceAllow=char-* rw
+ExecStart=/usr/lib/systemd/systemd-journald
+FileDescriptorStoreMax=4224
+# Ensure services using StandardOutput=journal do not break when journald is stopped
+FileDescriptorStorePreserve=yes
+ImportCredential=journal.*
+IPAddressDeny=any
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+OOMScoreAdjust=-250
+ProtectClock=yes
+Restart=always
+RestartSec=0
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_VSOCK AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RuntimeDirectory=systemd/journal
+RuntimeDirectoryPreserve=yes
+# Audit socket is not listed here because this unit can be turned off. However
+# the link between the socket and the service units is still created thanks to
+# the 'Service=' setting specified in the socket unit.
+Sockets=systemd-journald.socket systemd-journald-dev-log.socket
+StandardOutput=null
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+Type=notify-reload
+PassEnvironment=TERM
+
+
+# In case you're wondering why CAP_SYS_PTRACE is needed, access to
+# /proc/<pid>/exe requires this capability. Thus if this capability is missing
+# the _EXE=/OBJECT_EXE= fields will be missing from the journal entries.
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_SYS_PTRACE CAP_SYSLOG CAP_AUDIT_CONTROL CAP_AUDIT_READ CAP_CHOWN CAP_DAC_READ_SEARCH CAP_FOWNER CAP_SETUID CAP_SETGID CAP_MAC_OVERRIDE
+
+# If there are many split up journal files we need a lot of fds to access them
+# all in parallel.
+LimitNOFILE=524288
+
+# /usr/lib/systemd/system/service.d/10-timeout-abort.conf
+# This file is part of the systemd package.
+# See https://fedoraproject.org/wiki/Changes/Shorter_Shutdown_Timer.
+#
+# To facilitate debugging when a service fails to stop cleanly,
+# TimeoutStopFailureMode=abort is set to "crash" services that fail to stop in
+# the time allotted. This will cause the service to be terminated with SIGABRT
+# and a coredump to be generated.
+#
+# To undo this configuration change, create a mask file:
+#   sudo mkdir -p /etc/systemd/system/service.d
+#   sudo ln -sv /dev/null /etc/systemd/system/service.d/10-timeout-abort.conf
+
+[Service]
+TimeoutStopFailureMode=abort
+
+===== JOURNAL FLUSH UNIT =====
+# /usr/lib/systemd/system/systemd-journal-flush.service
+#  SPDX-License-Identifier: LGPL-2.1-or-later
+#
+#  This file is part of systemd.
+#
+#  systemd is free software; you can redistribute it and/or modify it
+#  under the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation; either version 2.1 of the License, or
+#  (at your option) any later version.
+
+[Unit]
+Description=Flush Journal to Persistent Storage
+Documentation=man:systemd-journald.service(8) man:journald.conf(5)
+
+ConditionPathExists=!/etc/initrd-release
+
+DefaultDependencies=no
+After=systemd-remount-fs.service systemd-quotacheck-root.service
+Before=systemd-tmpfiles-setup.service
+Wants=systemd-journald.service
+After=systemd-journald.service
+RequiresMountsFor=/var/log/journal
+
+Before=soft-reboot.target systemd-soft-reboot.service
+Conflicts=soft-reboot.target
+
+[Service]
+ExecStart=journalctl --flush
+ExecStop=journalctl --smart-relinquish-var
+Type=oneshot
+RemainAfterExit=yes
+TimeoutSec=90s
+
+# /usr/lib/systemd/system/service.d/10-timeout-abort.conf
+# This file is part of the systemd package.
+# See https://fedoraproject.org/wiki/Changes/Shorter_Shutdown_Timer.
+#
+# To facilitate debugging when a service fails to stop cleanly,
+# TimeoutStopFailureMode=abort is set to "crash" services that fail to stop in
+# the time allotted. This will cause the service to be terminated with SIGABRT
+# and a coredump to be generated.
+#
+# To undo this configuration change, create a mask file:
+#   sudo mkdir -p /etc/systemd/system/service.d
+#   sudo ln -sv /dev/null /etc/systemd/system/service.d/10-timeout-abort.conf
+
+[Service]
+TimeoutStopFailureMode=abort
+
+===== JOURNALD STATUS =====
+● systemd-journald.service - Journal Service
+     Loaded: loaded (/usr/lib/systemd/system/systemd-journald.service; static)
+    Drop-In: /usr/lib/systemd/system/service.d
+             └─10-timeout-abort.conf
+     Active: active (running) since Thu 2026-08-13 18:59:22 -04; 6h ago
+ Invocation: eb835a6673b04ae19ba0ca111f989aa7
+TriggeredBy: ● systemd-journald-dev-log.socket
+             ● systemd-journald.socket
+             ● systemd-journald-audit.socket
+       Docs: man:systemd-journald.service(8)
+             man:journald.conf(5)
+   Main PID: 569 (systemd-journal)
+     Status: "Processing requests..."
+      Tasks: 1 (limit: 16552)
+   FD Store: 109 (limit: 4224)
+     Memory: 22.3M (peak: 88.8M, swap: 992K, swap peak: 992K)
+        CPU: 12.934s
+     CGroup: /system.slice/systemd-journald.service
+             └─569 /usr/lib/systemd/systemd-journald
+
+ago 13 18:59:22 zeughaus systemd-journald[569]: Collecting audit messages is enabled.
+ago 13 18:59:22 zeughaus systemd-journald[569]: Journal started
+ago 13 18:59:22 zeughaus systemd-journald[569]: Runtime Journal (/run/log/journal/401557ddc7e44dd894c4a60880631a08) is 8M, max 277.4M, 269.4M free.
+ago 13 18:59:22 zeughaus systemd[1]: systemd-journald.service: Deactivated successfully.
+ago 13 18:59:22 zeughaus systemd-journald[569]: Runtime Journal (/run/log/journal/401557ddc7e44dd894c4a60880631a08) is 8M, max 277.4M, 269.4M free.
+ago 13 18:59:22 zeughaus systemd-journald[569]: Received client request to flush runtime journal.
+ago 13 22:17:19 zeughaus systemd-journald[569]: Time spent on flushing to /var/log/journal/401557ddc7e44dd894c4a60880631a08 is 1.012290s for 49836 entries.
+ago 13 22:17:19 zeughaus systemd-journald[569]: System Journal (/var/log/journal/401557ddc7e44dd894c4a60880631a08) is 78.1M, max 4G, 3.9G free.
+ago 13 22:17:20 zeughaus systemd-journald[569]: Received client request to flush runtime journal.
+
+===== FLUSH STATUS =====
+● systemd-journal-flush.service - Flush Journal to Persistent Storage
+     Loaded: loaded (/usr/lib/systemd/system/systemd-journal-flush.service; static)
+    Drop-In: /usr/lib/systemd/system/service.d
+             └─10-timeout-abort.conf
+     Active: active (exited) since Thu 2026-08-13 18:59:22 -04; 6h ago
+ Invocation: ba97a30ea8ca441ab2b03e39d33aa66b
+       Docs: man:systemd-journald.service(8)
+             man:journald.conf(5)
+   Main PID: 584 (code=exited, status=0/SUCCESS)
+   Mem peak: 1.6M
+        CPU: 11ms
+
+ago 13 18:59:22 zeughaus systemd[1]: Starting systemd-journal-flush.service - Flush Journal to Persistent Storage...
+ago 13 18:59:22 zeughaus systemd[1]: Finished systemd-journal-flush.service - Flush Journal to Persistent Storage.
+
+===== JOURNALD PROPERTIES =====
+ActiveState=active
+SubState=running
+ExecMainStartTimestamp=Thu 2026-08-13 18:59:22 -04
+ExecMainExitTimestamp=
+
+===== FLUSH PROPERTIES =====
+ActiveState=active
+SubState=exited
+ExecMainStartTimestamp=Thu 2026-08-13 18:59:22 -04
+ExecMainExitTimestamp=Thu 2026-08-13 18:59:22 -04
+
+===== JOURNAL LOCATIONS =====
+/var/log/journal/401557ddc7e44dd894c4a60880631a08/system.journal 16777216 bytes 2026-08-14 01:48:24.1367259790
+/var/log/journal/401557ddc7e44dd894c4a60880631a08/system@188becb18cc44aa0affe56b8fc711bea-0000000000258682-00064f9ff3a28ef4.journal 41943040 bytes 2026-08-13 22:17:20.6292449230
+/var/log/journal/401557ddc7e44dd894c4a60880631a08/user-1000.journal 8388608 bytes 2026-08-14 01:48:24.1367259790
+/var/log/journal/401557ddc7e44dd894c4a60880631a08/user-1000@188becb18cc44aa0affe56b8fc711bea-00000000000e625a-00064f36c6b4c40d.journal 41943040 bytes 2026-08-13 22:17:20.8692443000
