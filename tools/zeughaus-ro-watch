@@ -2,13 +2,19 @@
 # zeughaus-ro-watch v0.4
 # Detects loss of write access to the root Btrfs filesystem and captures
 # forensic evidence into /run, which remains writable if / becomes read-only.
+#
+# v0.4 adds a low-volume persistent heartbeat log. The write test still runs
+# every 10 seconds, but one compact telemetry record is persisted per minute.
+# Heartbeat logs are kept for 7 days. Incident evidence remains under /run.
 
 set -u
 
 INTERVAL=10
+HEARTBEAT_INTERVAL=60
 COMMAND_TIMEOUT=15
 BASE=/run/zeughaus-ro-watch
 TEST=/root/.zeughaus-rw-watch-test
+LOG_DIR=/var/log/zeughaus-ro-watch
 
 mkdir -p "$BASE"
 chmod 700 "$BASE"
@@ -26,9 +32,10 @@ run_capture() {
 write_test() {
     local path="$1"
     python3 - "$path" <<'PY'
-import errno, os, sys
+import errno, os, sys, time
 
 path = sys.argv[1]
+start = time.monotonic_ns()
 try:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
@@ -36,10 +43,14 @@ try:
     finally:
         os.close(fd)
     os.unlink(path)
+    duration_ns = time.monotonic_ns() - start
     print("RESULT=WRITE_OK")
+    print(f"DURATION_NS={duration_ns}")
     sys.exit(0)
 except OSError as e:
+    duration_ns = time.monotonic_ns() - start
     print("RESULT=WRITE_FAILED")
+    print(f"DURATION_NS={duration_ns}")
     print(f"ERRNO={e.errno}")
     print(f"ERRNAME={errno.errorcode.get(e.errno, 'UNKNOWN')}")
     print(f"ERROR={e}")
@@ -51,6 +62,35 @@ PY
 # safely through timeout -> bash. v0.3 incorrectly asked timeout to execute
 # the function as if it were an external command.
 export -f write_test
+
+heartbeat_log() {
+    local timestamp="$1"
+    local tests="$2"
+    local min_ns="$3"
+    local max_ns="$4"
+    local total_ns="$5"
+
+    # The telemetry log is deliberately best-effort. A failure to append here
+    # must NEVER be interpreted as a filesystem incident: the authoritative
+    # health test is write_test() itself.
+    if (( tests > 0 )); then
+        local avg_ns=$((total_ns / tests))
+        local avg_ms min_ms max_ms
+        avg_ms=$(awk -v n="$avg_ns" 'BEGIN { printf "%.3f", n / 1000000 }')
+        min_ms=$(awk -v n="$min_ns" 'BEGIN { printf "%.3f", n / 1000000 }')
+        max_ms=$(awk -v n="$max_ns" 'BEGIN { printf "%.3f", n / 1000000 }')
+        printf '%s status=OK tests=%d avg_ms=%s min_ms=%s max_ms=%s\n' \
+            "$timestamp" "$tests" "$avg_ms" "$min_ms" "$max_ms" >> "$LOG_DIR/heartbeat-$(date +%Y-%m-%d).log" 2>/dev/null || true
+    else
+        printf '%s status=NO_TESTS\n' "$timestamp" >> "$LOG_DIR/heartbeat-$(date +%Y-%m-%d).log" 2>/dev/null || true
+    fi
+}
+
+prune_heartbeat_logs() {
+    # Daily files make the 7-day retention deterministic and keep individual
+    # files small. Pruning is best-effort because / may be read-only.
+    find "$LOG_DIR" -type f -name 'heartbeat-*.log' -mtime +7 -delete 2>/dev/null || true
+}
 
 capture() {
     local incident="$1"
@@ -64,6 +104,7 @@ capture() {
         printf 'errname=%s\n' "${WRITE_ERRNAME:-unknown}"
         printf 'error=%s\n' "${WRITE_ERROR:-unknown}"
         printf 'write_rc=%s\n' "${WRITE_RC:-unknown}"
+        printf 'write_duration_ns=%s\n' "${WRITE_DURATION_NS:-unknown}"
         printf 'root_state_before_capture=\n'
         timeout --kill-after=2s "${COMMAND_TIMEOUT}s" findmnt -no TARGET,FSTYPE,OPTIONS / 2>&1 || true
     } > "$dir/INCIDENT_TRIGGER.txt"
@@ -98,12 +139,70 @@ capture() {
     log "RO incident captured: $dir"
 }
 
-log "started; interval=${INTERVAL}s command_timeout=${COMMAND_TIMEOUT}s"
+# Persistent telemetry is deliberately initialized lazily. If / is already
+# read-only at service start, the watchdog must still start and capture an
+# incident rather than failing because the log directory cannot be created.
+if mkdir -p "$LOG_DIR" 2>/dev/null; then
+    chmod 700 "$LOG_DIR" 2>/dev/null || true
+    prune_heartbeat_logs
+else
+    log "heartbeat log directory unavailable; telemetry will resume when writable"
+fi
+
+log "started; interval=${INTERVAL}s heartbeat=${HEARTBEAT_INTERVAL}s command_timeout=${COMMAND_TIMEOUT}s"
+
+HEARTBEAT_MONO_NS="$(python3 - <<'PY'
+import time
+print(time.monotonic_ns())
+PY
+)"
+TESTS=0
+MIN_NS=0
+MAX_NS=0
+TOTAL_NS=0
+LAST_PRUNE_MONO_NS="$HEARTBEAT_MONO_NS"
 
 while :; do
     WRITE_OUTPUT=""
     if WRITE_OUTPUT=$(write_test "$TEST" 2>&1); then
         rm -f "$TEST"
+
+        WRITE_DURATION_NS="$(printf '%s\n' "$WRITE_OUTPUT" | awk -F= '/^DURATION_NS=/{print $2}')"
+        if [[ "$WRITE_DURATION_NS" =~ ^[0-9]+$ ]]; then
+            ((TESTS++))
+            TOTAL_NS=$((TOTAL_NS + WRITE_DURATION_NS))
+            if (( MIN_NS == 0 || WRITE_DURATION_NS < MIN_NS )); then
+                MIN_NS="$WRITE_DURATION_NS"
+            fi
+            if (( WRITE_DURATION_NS > MAX_NS )); then
+                MAX_NS="$WRITE_DURATION_NS"
+            fi
+        fi
+
+        now_mono_ns="$(python3 - <<'PY'
+import time
+print(time.monotonic_ns())
+PY
+)"
+        elapsed_ns=$((now_mono_ns - HEARTBEAT_MONO_NS))
+
+        if (( elapsed_ns >= HEARTBEAT_INTERVAL * 1000000000 )); then
+            if mkdir -p "$LOG_DIR" 2>/dev/null; then
+                chmod 700 "$LOG_DIR" 2>/dev/null || true
+                heartbeat_log "$(date --iso-8601=ns)" "$TESTS" "$MIN_NS" "$MAX_NS" "$TOTAL_NS"
+            fi
+            HEARTBEAT_MONO_NS="$now_mono_ns"
+            TESTS=0
+            MIN_NS=0
+            MAX_NS=0
+            TOTAL_NS=0
+        fi
+
+        prune_elapsed_ns=$((now_mono_ns - LAST_PRUNE_MONO_NS))
+        if (( prune_elapsed_ns >= 86400 * 1000000000 )); then
+            prune_heartbeat_logs
+            LAST_PRUNE_MONO_NS="$now_mono_ns"
+        fi
     else
         rc=$?
         WRITE_RC="$rc"
@@ -111,12 +210,14 @@ while :; do
         WRITE_ERRNO="unknown"
         WRITE_ERRNAME="unknown"
         WRITE_ERROR="$WRITE_OUTPUT"
+        WRITE_DURATION_NS="unknown"
 
         while IFS='=' read -r key value; do
             case "$key" in
                 ERRNO) WRITE_ERRNO="$value" ;;
                 ERRNAME) WRITE_ERRNAME="$value" ;;
                 ERROR) WRITE_ERROR="$value" ;;
+                DURATION_NS) WRITE_DURATION_NS="$value" ;;
             esac
         done <<< "$WRITE_OUTPUT"
 
@@ -126,7 +227,7 @@ while :; do
         fi
 
         incident="${incident_type}-$(date +%Y%m%d-%H%M%S-%N)"
-        log "WRITE TEST FAILED type=$incident_type rc=$rc errno=$WRITE_ERRNO errname=$WRITE_ERRNAME error=$WRITE_ERROR"
+        log "WRITE TEST FAILED type=$incident_type rc=$rc errno=$WRITE_ERRNO errname=$WRITE_ERRNAME error=$WRITE_ERROR duration_ns=$WRITE_DURATION_NS"
         capture "$incident"
 
         ro_started="$(date --iso-8601=ns)"
@@ -143,6 +244,19 @@ while :; do
             fi
             printf '%s\n' "$(date --iso-8601=ns) still_unwritable errno=$(printf '%s\n' "$recovery_output" | awk -F= '/^ERRNO=/{print $2}')" >> "$BASE/WRITE_FAILURE_ACTIVE"
         done
+
+        # Start a fresh one-minute telemetry window after recovery. The
+        # incident itself is already preserved in /run, and the next heartbeat
+        # will record the first successful tests after recovery.
+        HEARTBEAT_MONO_NS="$(python3 - <<'PY'
+import time
+print(time.monotonic_ns())
+PY
+)"
+        TESTS=0
+        MIN_NS=0
+        MAX_NS=0
+        TOTAL_NS=0
     fi
 
     sleep "$INTERVAL"
