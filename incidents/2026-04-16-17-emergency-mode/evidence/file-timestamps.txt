@@ -1,0 +1,27 @@
+  Fichero: /etc/kernel/cmdline
+  Tamaño: 84        	Bloques: 8          Bloque E/S: 4096   fichero regular
+Device: 0,37	Inode: 150627      Links: 1
+Acceso: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Contexto: unconfined_u:object_r:etc_t:s0
+      Acceso: 2026-08-20 04:39:28.659590111 -0400
+Modificación: 2026-04-09 19:05:53.166586594 -0400
+      Cambio: 2026-04-09 19:05:53.166586594 -0400
+    Creación: 2026-04-07 03:36:10.615245500 -0400
+  Fichero: /etc/fstab
+  Tamaño: 885       	Bloques: 8          Bloque E/S: 4096   fichero regular
+Device: 0,37	Inode: 150622      Links: 1
+Acceso: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Contexto: unconfined_u:object_r:etc_t:s0
+      Acceso: 2026-08-19 08:30:30.340317607 -0400
+Modificación: 2026-07-12 23:52:38.350886887 -0400
+      Cambio: 2026-07-12 23:52:38.350886887 -0400
+    Creación: 2026-04-07 03:36:08.884247526 -0400
+  Fichero: /etc/fstab.bak
+  Tamaño: 1097      	Bloques: 8          Bloque E/S: 4096   fichero regular
+Device: 0,37	Inode: 1339179     Links: 1
+Acceso: (0644/-rw-r--r--)  Uid: (    0/    root)   Gid: (    0/    root)
+Contexto: unconfined_u:object_r:etc_t:s0
+      Acceso: 2026-08-20 04:39:28.748589924 -0400
+Modificación: 2026-04-17 01:57:32.917667976 -0400
+      Cambio: 2026-04-17 01:57:32.917667976 -0400
+    Creación: 2026-04-17 01:57:32.917667976 -0400

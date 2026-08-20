@@ -1,0 +1,15 @@
+UUID=8ccfa1f6-6a4d-48a5-abe0-76ecee6bfd15 /home btrfs subvol=home,compress=zstd:1 0 0
+UUID=de016213-874e-468e-bff1-048461e7c31a /boot ext4 defaults 1 2
+UUID=7062-811E /boot/efi vfat umask=0077,shortname=winnt 0 2
+
+# DISCO AZUL
+UUID=01D88938953C23B0 /home/oscar/discos/feo-azul ntfs-3g defaults,uid=1000,gid=1000,nofail 0 0
+
+# DISCO AMARILLO
+UUID=01D9CA86BDA9A3A0 /home/oscar/discos/feo-amarillo ntfs-3g defaults,uid=1000,gid=1000,nofail 0 0
+
+# MONTAJE PARTICION RESCATADA DE WINDOWS
+UUID=eb2d5610-6943-4717-8d2d-7b79a6eeb6ee  /home/oscar/mnt/rescate  ext4  defaults,nofail  0  2
+
+# MONTAJE SSHFS DE CARPETA DE ESCANEOS DESDE HEINRICI
+oscar@heinrici:/var/lib/scanservjs/output /home/oscar/scans fuse.sshfs _netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600,users,IdentityFile=/home/oscar/.ssh/id_ed25519,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 0 0

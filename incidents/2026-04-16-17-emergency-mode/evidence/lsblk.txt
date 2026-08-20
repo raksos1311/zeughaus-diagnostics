@@ -1,0 +1,15 @@
+NAME          SIZE FSTYPE FSVER LABEL             UUID                                 MOUNTPOINTS
+sda         476,9G                                                                     
+└─sda1      476,9G ntfs         SSD_AMARILLO      01D9CA86BDA9A3A0                     /home/oscar/discos/feo-amarillo
+sdb         931,5G                                                                     
+└─sdb1      931,5G ntfs         HDD_AZUL_RESPALDO 01D88938953C23B0                     /home/oscar/discos/feo-azul
+zram0           8G swap   1     zram0             d661d336-2bb0-4e96-9025-d337337c5ade [SWAP]
+nvme0n1     931,5G                                                                     
+├─nvme0n1p1   260M vfat   FAT32                   7062-811E                            /boot/efi
+├─nvme0n1p2    16M                                                                     
+├─nvme0n1p3   350G ntfs         Windows           01DCF239C646D220                     
+├─nvme0n1p4     2G ext4   1.0                     de016213-874e-468e-bff1-048461e7c31a /boot
+├─nvme0n1p5 108,5G btrfs        fedora            8ccfa1f6-6a4d-48a5-abe0-76ecee6bfd15 /home
+│                                                                                      /
+├─nvme0n1p6   740M ntfs                           42A64F98A64F8B7D                     
+└─nvme0n1p7 341,8G ext4   1.0                     eb2d5610-6943-4717-8d2d-7b79a6eeb6ee /home/oscar/mnt/rescate

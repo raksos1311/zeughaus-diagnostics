@@ -1,0 +1,38 @@
+--- /etc/fstab.bak	2026-04-17 01:57:32.917667976 -0400
++++ /etc/fstab	2026-07-12 23:52:38.350886887 -0400
+@@ -1,23 +1,15 @@
+-
+-#
+-# /etc/fstab
+-# Created by anaconda on Tue Apr  7 07:36:08 2026
+-#
+-# Accessible filesystems, by reference, are maintained under '/dev/disk/'.
+-# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info.
+-#
+-# After editing this file, run 'systemctl daemon-reload' to update systemd
+-# units generated from this file.
+-#
+-UUID=8ccfa1f6-6a4d-48a5-abe0-76ecee6bfd15 / btrfs subvol=root,compress=zstd:1 0 0
++UUID=8ccfa1f6-6a4d-48a5-abe0-76ecee6bfd15 /home btrfs subvol=home,compress=zstd:1 0 0
+ UUID=de016213-874e-468e-bff1-048461e7c31a /boot ext4 defaults 1 2
+ UUID=7062-811E /boot/efi vfat umask=0077,shortname=winnt 0 2
+ 
+-# MONTAJE DISCOS USB. PROBABLE PROBLEMA!! OJO.
+-UUID=01D88938953C23B0 /mnt/discos/feo-azul ntfs defaults,nofail 0 0
+-UUID=01D9CA86BDA9A3A0 /mnt/discos/feo-amarillo ntfs defaults,nofail 0 0
+-# sshfs#oscar@heinrici:/home/oscar  /home/oscar/heinrici  fuse.sshfs  _netdev,x-systemd.automount,noatime,IdentityFile=/home/oscar/.ssh/id_ed25519,allow_other,reconnect  0  0
+- 
+-# MONTAJE CREADO POR OSCAR PARA SOLUCIONAR PROBLEMA DE ARRANQUE en emergency, del 17/04/2026.
+-/dev/nvme0n1p6 /mnt/home_disk btrfs defaults,nofail 0 0
+-/mnt/home_disk/home /home none bind 0 0
++# DISCO AZUL
++UUID=01D88938953C23B0 /home/oscar/discos/feo-azul ntfs-3g defaults,uid=1000,gid=1000,nofail 0 0
++
++# DISCO AMARILLO
++UUID=01D9CA86BDA9A3A0 /home/oscar/discos/feo-amarillo ntfs-3g defaults,uid=1000,gid=1000,nofail 0 0
++
++# MONTAJE PARTICION RESCATADA DE WINDOWS
++UUID=eb2d5610-6943-4717-8d2d-7b79a6eeb6ee  /home/oscar/mnt/rescate  ext4  defaults,nofail  0  2
++
++# MONTAJE SSHFS DE CARPETA DE ESCANEOS DESDE HEINRICI
++oscar@heinrici:/var/lib/scanservjs/output /home/oscar/scans fuse.sshfs _netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600,users,IdentityFile=/home/oscar/.ssh/id_ed25519,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 0 0
