@@ -1,0 +1,16 @@
+● zeughaus-ro-watch.service - Zeughaus Btrfs read-only filesystem watchdog
+     Loaded: loaded (/etc/systemd/system/zeughaus-ro-watch.service; enabled; preset: disabled)
+    Drop-In: /usr/lib/systemd/system/service.d
+             └─10-timeout-abort.conf
+     Active: active (running) since Mon 2026-08-17 03:17:14 -04; 3 days ago
+ Invocation: 2928705668ca4a0f9d472fb1c534fbb9
+       Docs: https://github.com/raksos1311/zeughaus-diagnostics
+   Main PID: 1177218 (zeughaus-ro-wat)
+      Tasks: 2 (limit: 16552)
+     Memory: 9.9M (peak: 16.1M, swap: 128K, swap peak: 300K)
+        CPU: 32min 57.997s
+     CGroup: /system.slice/zeughaus-ro-watch.service
+             ├─1177218 /bin/bash /usr/local/sbin/zeughaus-ro-watch
+             └─2704937 sleep 10
+
+ago 17 03:17:14 zeughaus systemd[1]: Started zeughaus-ro-watch.service - Zeughaus Btrfs read-only filesystem watchdog.
